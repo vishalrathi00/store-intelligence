@@ -1,0 +1,13 @@
+@"
+# Data Directory
+
+This folder holds input data which is NOT committed to the repository (gitignored for size and confidentiality).
+
+## Required files (provided separately by the assessment team):
+- ``CAM 1.mp4`` to ``CAM 5.mp4`` — CCTV footage
+- ``Brigade_Bangalore_*.csv`` — POS transaction records
+- ``Brigade Road - Store layout.xlsx`` — store floor plan with zones
+- ``sample_events.jsonl`` — reference event schema
+
+Place these files here before running the pipeline.
+"@ | Out-File -FilePath data/README.md -Encoding utf8
