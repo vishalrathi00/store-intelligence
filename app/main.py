@@ -1,5 +1,13 @@
-from fastapi import FastAPI
+import time
+import uuid
+import logging
+import json
+from datetime import datetime
+from fastapi import FastAPI, Request
 from app.db import init_db, get_connection
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger("store-intelligence")
 
 app = FastAPI(title="Store Intelligence API", version="1.0.0")
 
@@ -7,6 +15,76 @@ app = FastAPI(title="Store Intelligence API", version="1.0.0")
 @app.on_event("startup")
 def startup():
     init_db()
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    trace_id = str(uuid.uuid4())
+    start = time.time()
+    response = await call_next(request)
+    latency_ms = round((time.time() - start) * 1000, 2)
+    store_id = None
+    parts = request.url.path.split("/")
+    if "stores" in parts:
+        idx = parts.index("stores")
+        if idx + 1 < len(parts):
+            store_id = parts[idx + 1]
+    logger.info(json.dumps({
+        "trace_id": trace_id,
+        "store_id": store_id,
+        "endpoint": request.url.path,
+        "method": request.method,
+        "status_code": response.status_code,
+        "latency_ms": latency_ms,
+    }))
+    response.headers["X-Trace-Id"] = trace_id
+    return response
+
+
+def parse_ts(ts):
+    """Parse a timestamp string into a datetime; returns None on failure."""
+    if not ts:
+        return None
+    ts = ts.strip()
+    for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S",
+                "%d-%m-%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(ts, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def compute_converted(conn, store_id):
+    """
+    Spec method: a visitor counts as converted if there was billing-zone
+    activity within the 5-minute window before a purchase timestamp.
+    We correlate purchase event timestamps with queue (billing) event
+    timestamps on the same store.
+    """
+    purchases = conn.execute(
+        "SELECT event_timestamp FROM events WHERE store_code=? AND event_type='purchase'",
+        (store_id,),
+    ).fetchall()
+    queue_rows = conn.execute(
+        "SELECT event_timestamp FROM events WHERE store_code=? AND event_type='queue'",
+        (store_id,),
+    ).fetchall()
+
+    queue_times = [parse_ts(r["event_timestamp"]) for r in queue_rows]
+    queue_times = [t for t in queue_times if t is not None]
+
+    converted = 0
+    for p in purchases:
+        pt = parse_ts(p["event_timestamp"])
+        if pt is None:
+            continue
+        for qt in queue_times:
+            delta = (pt - qt).total_seconds()
+            if 0 <= delta <= 300:  # billing activity within 5 min before purchase
+                converted += 1
+                break
+    return converted
 
 
 @app.get("/")
@@ -31,13 +109,9 @@ def ingest_events(events: list[dict]):
                     event_timestamp, zone_name, is_staff)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    e.get("event_type"),
-                    e.get("track_id"),
-                    e.get("store_code"),
-                    e.get("camera_id"),
-                    e.get("event_timestamp"),
-                    e.get("zone_name"),
-                    1 if e.get("is_staff") else 0,
+                    e.get("event_type"), e.get("track_id"), e.get("store_code"),
+                    e.get("camera_id"), e.get("event_timestamp"),
+                    e.get("zone_name"), 1 if e.get("is_staff") else 0,
                 ),
             )
             inserted += 1
@@ -45,6 +119,7 @@ def ingest_events(events: list[dict]):
             pass
     conn.commit()
     conn.close()
+    logger.info(json.dumps({"event": "ingest", "event_count": len(events), "ingested": inserted}))
     return {"ingested": inserted, "status": "accepted"}
 
 
@@ -52,29 +127,24 @@ def ingest_events(events: list[dict]):
 def get_metrics(store_id: str):
     conn = get_connection()
     visitors = conn.execute(
-        """SELECT COUNT(DISTINCT track_id) AS c
-           FROM events
-           WHERE store_code = ? AND event_type = 'entry' AND is_staff = 0""",
+        "SELECT COUNT(DISTINCT track_id) AS c FROM events WHERE store_code=? AND event_type='entry' AND is_staff=0",
         (store_id,),
     ).fetchone()["c"] or 0
-
     purchases = conn.execute(
-        """SELECT COUNT(*) AS c
-           FROM events
-           WHERE store_code = ? AND event_type = 'purchase'""",
+        "SELECT COUNT(*) AS c FROM events WHERE store_code=? AND event_type='purchase'",
         (store_id,),
     ).fetchone()["c"] or 0
+    converted = compute_converted(conn, store_id)
     conn.close()
-
-    conversion = round((purchases / visitors) * 100, 1) if visitors > 0 else 0.0
-
+    conversion = round((converted / visitors) * 100, 1) if visitors > 0 else 0.0
     return {
         "store_id": store_id,
         "unique_visitors": visitors,
         "purchases": purchases,
+        "converted_visitors": converted,
         "conversion_rate_percent": conversion,
         "avg_dwell_seconds": 0,
-        "note": "Visitors from processed footage sample; purchases from full-day POS. See DESIGN.md.",
+        "note": "Conversion uses spec method: a visitor is converted if billing-zone activity occurred within the 5-minute window before a purchase. See DESIGN.md.",
     }
 
 
@@ -82,61 +152,45 @@ def get_metrics(store_id: str):
 def get_funnel(store_id: str):
     conn = get_connection()
     entered = conn.execute(
-        """SELECT COUNT(DISTINCT track_id) AS c
-           FROM events
-           WHERE store_code = ? AND event_type = 'entry' AND is_staff = 0""",
+        "SELECT COUNT(DISTINCT track_id) AS c FROM events WHERE store_code=? AND event_type='entry' AND is_staff=0",
         (store_id,),
     ).fetchone()["c"] or 0
-
+    browsed = conn.execute(
+        "SELECT COUNT(DISTINCT track_id) AS c FROM events WHERE store_code=? AND event_type='zone_entered'",
+        (store_id,),
+    ).fetchone()["c"] or 0
+    queued = conn.execute(
+        "SELECT COUNT(*) AS c FROM events WHERE store_code=? AND event_type='queue'",
+        (store_id,),
+    ).fetchone()["c"] or 0
     purchased = conn.execute(
-        """SELECT COUNT(*) AS c
-           FROM events
-           WHERE store_code = ? AND event_type = 'purchase'""",
+        "SELECT COUNT(*) AS c FROM events WHERE store_code=? AND event_type='purchase'",
         (store_id,),
     ).fetchone()["c"] or 0
     conn.close()
-
-    return {
-        "store_id": store_id,
-        "entered": entered,
-        "browsed": 0,
-        "queued": 0,
-        "purchased": purchased,
-    }
+    return {"store_id": store_id, "entered": entered, "browsed": browsed, "queued": queued, "purchased": purchased}
 
 
 @app.get("/stores/{store_id}/heatmap")
 def get_heatmap(store_id: str):
     conn = get_connection()
     rows = conn.execute(
-        """SELECT zone_name, COUNT(*) AS visits
-           FROM events
-           WHERE store_code = ? AND event_type = 'zone_entered'
-           GROUP BY zone_name""",
+        "SELECT zone_name, COUNT(*) AS visits FROM events WHERE store_code=? AND event_type='zone_entered' GROUP BY zone_name",
         (store_id,),
     ).fetchall()
     conn.close()
-
-    zones = [{"zone_name": r["zone_name"], "visits": r["visits"]} for r in rows]
-    return {"store_id": store_id, "zones": zones}
+    return {"store_id": store_id, "zones": [{"zone_name": r["zone_name"], "visits": r["visits"]} for r in rows]}
 
 
 @app.get("/stores/{store_id}/anomalies")
 def get_anomalies(store_id: str):
     conn = get_connection()
     max_queue = conn.execute(
-        """SELECT MAX(track_id) AS m
-           FROM events
-           WHERE store_code = ? AND event_type = 'queue'""",
+        "SELECT MAX(track_id) AS m FROM events WHERE store_code=? AND event_type='queue'",
         (store_id,),
     ).fetchone()["m"]
     conn.close()
-
     anomalies = []
     if max_queue and max_queue > 5:
-        anomalies.append({
-            "type": "long_queue",
-            "detail": f"Queue length reached {max_queue}",
-        })
-
+        anomalies.append({"type": "long_queue", "detail": f"Queue length reached {max_queue}"})
     return {"store_id": store_id, "anomalies": anomalies}

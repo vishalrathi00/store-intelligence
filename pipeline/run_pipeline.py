@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from ultralytics import YOLO
 
 VIDEO_PATH = "data/CAM 3.mp4"
-STORE_CODE = "ST1008"
+STORE_CODE = "STORE_BLR_002"
 CAMERA_ID = "CAM3"
 OUTPUT_PATH = "data/events.jsonl"
 

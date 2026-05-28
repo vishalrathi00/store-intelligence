@@ -5,7 +5,7 @@ from ultralytics import YOLO
 
 VIDEO_PATH = "data/CAM 5.mp4"
 OUTPUT_PATH = "data/cam5_queue_events.jsonl"
-STORE_CODE = "ST1008"
+STORE_CODE = "STORE_BLR_002"
 CAMERA_ID = "CAM5"
 
 print("Loading YOLO model...")

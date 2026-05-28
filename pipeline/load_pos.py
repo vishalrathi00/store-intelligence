@@ -3,7 +3,7 @@ import json
 
 CSV_PATH = "data/Brigade_Bangalore_10_April_26 (1).csv"
 OUTPUT_PATH = "data/pos_events.jsonl"
-STORE_CODE = "ST1008"
+STORE_CODE = "STORE_BLR_002"
 
 rows = list(csv.DictReader(open(CSV_PATH, encoding="utf-8")))
 
