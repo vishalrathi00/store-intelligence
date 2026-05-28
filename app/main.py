@@ -51,31 +51,92 @@ def ingest_events(events: list[dict]):
 @app.get("/stores/{store_id}/metrics")
 def get_metrics(store_id: str):
     conn = get_connection()
-    row = conn.execute(
-        """SELECT COUNT(DISTINCT track_id) AS visitors
+    visitors = conn.execute(
+        """SELECT COUNT(DISTINCT track_id) AS c
            FROM events
            WHERE store_code = ? AND event_type = 'entry' AND is_staff = 0""",
         (store_id,),
-    ).fetchone()
+    ).fetchone()["c"] or 0
+
+    purchases = conn.execute(
+        """SELECT COUNT(*) AS c
+           FROM events
+           WHERE store_code = ? AND event_type = 'purchase'""",
+        (store_id,),
+    ).fetchone()["c"] or 0
     conn.close()
+
+    conversion = round((purchases / visitors) * 100, 1) if visitors > 0 else 0.0
+
     return {
         "store_id": store_id,
-        "unique_visitors": row["visitors"] or 0,
+        "unique_visitors": visitors,
+        "purchases": purchases,
+        "conversion_rate_percent": conversion,
         "avg_dwell_seconds": 0,
-        "conversion_rate": 0.0,
+        "note": "Visitors from processed footage sample; purchases from full-day POS. See DESIGN.md.",
     }
 
 
 @app.get("/stores/{store_id}/funnel")
 def get_funnel(store_id: str):
-    return {"store_id": store_id, "entered": 0, "browsed": 0, "queued": 0, "purchased": 0}
+    conn = get_connection()
+    entered = conn.execute(
+        """SELECT COUNT(DISTINCT track_id) AS c
+           FROM events
+           WHERE store_code = ? AND event_type = 'entry' AND is_staff = 0""",
+        (store_id,),
+    ).fetchone()["c"] or 0
+
+    purchased = conn.execute(
+        """SELECT COUNT(*) AS c
+           FROM events
+           WHERE store_code = ? AND event_type = 'purchase'""",
+        (store_id,),
+    ).fetchone()["c"] or 0
+    conn.close()
+
+    return {
+        "store_id": store_id,
+        "entered": entered,
+        "browsed": 0,
+        "queued": 0,
+        "purchased": purchased,
+    }
 
 
 @app.get("/stores/{store_id}/heatmap")
 def get_heatmap(store_id: str):
-    return {"store_id": store_id, "zones": []}
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT zone_name, COUNT(*) AS visits
+           FROM events
+           WHERE store_code = ? AND event_type = 'zone_entered'
+           GROUP BY zone_name""",
+        (store_id,),
+    ).fetchall()
+    conn.close()
+
+    zones = [{"zone_name": r["zone_name"], "visits": r["visits"]} for r in rows]
+    return {"store_id": store_id, "zones": zones}
 
 
 @app.get("/stores/{store_id}/anomalies")
 def get_anomalies(store_id: str):
-    return {"store_id": store_id, "anomalies": []}
+    conn = get_connection()
+    max_queue = conn.execute(
+        """SELECT MAX(track_id) AS m
+           FROM events
+           WHERE store_code = ? AND event_type = 'queue'""",
+        (store_id,),
+    ).fetchone()["m"]
+    conn.close()
+
+    anomalies = []
+    if max_queue and max_queue > 5:
+        anomalies.append({
+            "type": "long_queue",
+            "detail": f"Queue length reached {max_queue}",
+        })
+
+    return {"store_id": store_id, "anomalies": anomalies}
