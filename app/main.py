@@ -106,16 +106,21 @@ def dashboard():
 
 
 @app.post("/events/ingest")
-def ingest_events(events: list[dict]):
+async def ingest_events(request: Request):
+    try:
+        events = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "invalid JSON body"})
+
     if not isinstance(events, list):
         return JSONResponse(status_code=400, content={"error": "expected a list of events"})
+
     conn = get_connection()
     inserted, skipped = 0, 0
     for e in events:
         if not isinstance(e, dict):
             skipped += 1
             continue
-        # Flexible field mapping: accept both our schema and the spec sample schema
         track_id = e.get("track_id")
         if track_id is None:
             id_token = e.get("id_token")
