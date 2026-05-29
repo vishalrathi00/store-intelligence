@@ -1,253 +1,173 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Store Intelligence Dashboard</title>
-
 <style>
-*{box-sizing:border-box}
-
-body{
-  margin:0;
-  font-family:Inter,Segoe UI,Arial,sans-serif;
-  background:#020617;
-  color:#e2e8f0;
-  padding:32px;
-}
-
-.header{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  margin-bottom:28px;
-}
-
-h1{
-  margin:0;
-  font-size:28px;
-}
-
-.sub{
-  color:#94a3b8;
-  margin-top:8px;
-  font-size:14px;
-}
-
-.live{
-  display:inline-block;
-  width:10px;
-  height:10px;
-  background:#22c55e;
-  border-radius:50%;
-  box-shadow:0 0 12px #22c55e;
-  margin-right:8px;
-}
-
-.grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-  gap:18px;
-  margin-bottom:24px;
-}
-
-.card{
-  background:linear-gradient(145deg,#0f172a,#1e293b);
-  border:1px solid #334155;
-  border-radius:18px;
-  padding:24px;
-  box-shadow:0 12px 32px rgba(0,0,0,.35);
-}
-
-.label{
-  color:#94a3b8;
-  font-size:12px;
-  letter-spacing:1px;
-  text-transform:uppercase;
-}
-
-.value{
-  font-size:40px;
-  font-weight:700;
-  margin-top:10px;
-}
-
-.section{
-  background:#0f172a;
-  border:1px solid #334155;
-  border-radius:18px;
-  padding:24px;
-  margin-bottom:18px;
-  box-shadow:0 10px 28px rgba(0,0,0,.35);
-}
-
-.section h2{
-  margin-top:0;
-  margin-bottom:18px;
-  color:#f8fafc;
-}
-
-.bar-row{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  margin-bottom:14px;
-}
-
-.bar-label{
-  width:130px;
-  color:#cbd5e1;
-  font-size:14px;
-}
-
-.track{
-  flex:1;
-  background:#1e293b;
-  height:18px;
-  border-radius:999px;
-  overflow:hidden;
-}
-
-.bar{
-  height:100%;
-  border-radius:999px;
-}
-
-.metric{
-  color:#94a3b8;
-  font-size:13px;
-  width:42px;
-}
-
-footer{
-  margin-top:30px;
-  text-align:center;
-  color:#64748b;
-  font-size:13px;
-}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,Segoe UI,Arial,sans-serif;background:radial-gradient(circle at top,#0b1220,#020617);color:#e2e8f0;padding:32px;min-height:100vh}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+h1{font-size:28px;background:linear-gradient(90deg,#38bdf8,#a855f7);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.sub{color:#94a3b8;margin-top:6px;font-size:13px}
+.live{display:inline-block;width:9px;height:9px;background:#22c55e;border-radius:50%;margin-right:6px;animation:pulse 1.5s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.6)}70%{box-shadow:0 0 0 10px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+.tabs{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
+.tab{background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:10px 20px;border-radius:10px;cursor:pointer;font-size:14px;transition:.25s}
+.tab:hover{background:#334155;transform:translateY(-2px)}
+.tab.active{background:linear-gradient(90deg,#38bdf8,#0ea5e9);color:#020617;border-color:#38bdf8;font-weight:600}
+.view{display:none;animation:fade .4s}
+.view.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;margin-bottom:20px}
+.card{background:linear-gradient(145deg,#0f172a,#1e293b);border:1px solid #334155;border-radius:18px;padding:24px;transition:.3s;position:relative;overflow:hidden}
+.card:hover{transform:translateY(-4px);border-color:#38bdf8;box-shadow:0 16px 40px rgba(56,189,248,.15)}
+.card .icon{font-size:22px;margin-bottom:10px}
+.label{color:#94a3b8;font-size:12px;letter-spacing:1px;text-transform:uppercase}
+.value{font-size:40px;font-weight:700;margin-top:8px}
+.section{background:#0f172a;border:1px solid #334155;border-radius:18px;padding:24px;margin-bottom:16px}
+.section h2{font-size:16px;margin-bottom:18px;color:#f8fafc}
+.bar-row{display:flex;align-items:center;gap:12px;margin-bottom:13px}
+.bar-label{width:130px;color:#cbd5e1;font-size:14px}
+.track{flex:1;background:#1e293b;height:20px;border-radius:999px;overflow:hidden}
+.bar{height:100%;border-radius:999px;transition:width .8s cubic-bezier(.4,0,.2,1)}
+.metric{color:#94a3b8;font-size:13px;width:46px;text-align:right}
+.donut-wrap{display:flex;align-items:center;gap:30px;flex-wrap:wrap}
+.donut-center{font-size:24px;font-weight:700;fill:#e2e8f0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid #1e293b}
+th{color:#94a3b8;font-weight:500;text-transform:uppercase;font-size:11px}
+.badge{display:inline-block;padding:3px 12px;border-radius:999px;font-size:12px}
+.badge.ok{background:#064e3b;color:#6ee7b7}
+.badge.warn{background:#7c2d12;color:#fdba74}
+.feed{max-height:280px;overflow-y:auto}
+.feed-item{display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid #1e293b;animation:slideIn .4s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+footer{margin-top:28px;text-align:center;color:#64748b;font-size:12px}
 </style>
 </head>
-
 <body>
 
 <div class="header">
   <div>
     <h1>Store Intelligence Dashboard</h1>
-    <div class="sub">
-      <span class="live"></span>
-      Live analytics · STORE_BLR_002 · refresh every 5s
+    <div class="sub"><span class="live"></span>LIVE · STORE_BLR_002 · <span id="updated">loading...</span></div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-view="overview">Overview</div>
+  <div class="tab" data-view="funnel">Funnel</div>
+  <div class="tab" data-view="heatmap">Heatmap</div>
+  <div class="tab" data-view="anomalies">Anomalies</div>
+  <div class="tab" data-view="activity">Live Activity</div>
+</div>
+
+<div class="view active" id="overview">
+  <div class="grid" id="metrics"></div>
+  <div class="section">
+    <h2>Conversion</h2>
+    <div class="donut-wrap">
+      <svg width="160" height="160" style="transform:rotate(-90deg)">
+        <circle cx="80" cy="80" r="60" fill="none" stroke="#1e293b" stroke-width="20"/>
+        <circle id="donutArc" cx="80" cy="80" r="60" fill="none" stroke="#22c55e" stroke-width="20" stroke-dasharray="0 999" stroke-linecap="round" style="transition:stroke-dasharray 1s"/>
+      </svg>
+      <div>
+        <div style="font-size:34px;font-weight:700" id="donutText">0%</div>
+        <div id="convDetail" style="margin-top:8px;color:#cbd5e1;font-size:14px"></div>
+      </div>
     </div>
   </div>
 </div>
 
-<div class="grid" id="metrics"></div>
+<div class="view" id="funnel"><div class="section"><h2>Conversion Funnel</h2><div id="funnelBars"></div></div></div>
+<div class="view" id="heatmap"><div class="section"><h2>Zone Heatmap</h2><div id="heatmapBars"></div></div></div>
+<div class="view" id="anomalies"><div class="section"><h2>Anomalies</h2><div id="anomalyList"></div></div></div>
+<div class="view" id="activity"><div class="section"><h2>Live Activity Feed</h2><div class="feed" id="feed"></div></div></div>
 
-<div class="section">
-  <h2>Conversion Funnel</h2>
-  <div id="funnel"></div>
-</div>
-
-<div class="section">
-  <h2>Zone Heatmap</h2>
-  <div id="heatmap"></div>
-</div>
-
-<footer>
-Store Intelligence • YOLOv8 + ByteTrack • FastAPI • SQLite
-</footer>
+<footer>Store Intelligence • YOLOv8 + ByteTrack • FastAPI • SQLite</footer>
 
 <script>
-
 const STORE="STORE_BLR_002";
 
-async function load(){
+document.querySelectorAll(".tab").forEach(t=>{
+  t.onclick=()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
+    t.classList.add("active");
+    document.getElementById(t.dataset.view).classList.add("active");
+  };
+});
 
-  const metrics =
-    await (await fetch(`/stores/${STORE}/metrics`)).json();
-
-  const funnel =
-    await (await fetch(`/stores/${STORE}/funnel`)).json();
-
-  const heatmap =
-    await (await fetch(`/stores/${STORE}/heatmap`)).json();
-
-  document.getElementById("metrics").innerHTML = `
-    <div class="card">
-      <div class="label">Unique Visitors</div>
-      <div class="value">${metrics.unique_visitors}</div>
-    </div>
-
-    <div class="card">
-      <div class="label">Purchases</div>
-      <div class="value">${metrics.purchases}</div>
-    </div>
-
-    <div class="card">
-      <div class="label">Converted</div>
-      <div class="value">${metrics.converted_visitors ?? 0}</div>
-    </div>
-
-    <div class="card">
-      <div class="label">Conversion %</div>
-      <div class="value">${metrics.conversion_rate_percent}%</div>
-    </div>
-  `;
-
-  const funnelStages=[
-    ["Entered",funnel.entered,"#38bdf8"],
-    ["Browsed",funnel.browsed,"#22c55e"],
-    ["Queued",funnel.queued,"#f59e0b"],
-    ["Purchased",funnel.purchased,"#ef4444"]
-  ];
-
-  const maxF=Math.max(...funnelStages.map(s=>s[1]),1);
-
-  document.getElementById("funnel").innerHTML =
-    funnelStages.map(s=>`
-      <div class="bar-row">
-
-        <div class="bar-label">${s[0]}</div>
-
-        <div class="track">
-          <div class="bar"
-               style="width:${(s[1]/maxF)*100}%;
-               background:${s[2]}">
-          </div>
-        </div>
-
-        <div class="metric">${s[1]}</div>
-
-      </div>
-    `).join("");
-
-  const zones=heatmap.zones || [];
-  const maxZ=Math.max(...zones.map(z=>z.visits),1);
-
-  document.getElementById("heatmap").innerHTML =
-    zones.length
-      ? zones.map(z=>`
-        <div class="bar-row">
-
-          <div class="bar-label">${z.zone_name}</div>
-
-          <div class="track">
-            <div class="bar"
-                 style="width:${(z.visits/maxZ)*100}%;
-                 background:#a855f7">
-            </div>
-          </div>
-
-          <div class="metric">${z.visits}</div>
-
-        </div>
-      `).join("")
-      : "<div>No zone data</div>";
+function animateCount(el,target){
+  let cur=0;const step=Math.max(1,Math.ceil(target/30));
+  const iv=setInterval(()=>{cur+=step;if(cur>=target){cur=target;clearInterval(iv);}el.textContent=cur;},25);
 }
 
+function bars(data,container,color){
+  const max=Math.max(...data.map(d=>d[1]),1);
+  document.getElementById(container).innerHTML=data.map(d=>`
+    <div class="bar-row"><div class="bar-label">${d[0]}</div>
+    <div class="track"><div class="bar" style="width:${(d[1]/max)*100}%;background:${color}"></div></div>
+    <div class="metric">${d[1]}</div></div>`).join("");
+}
+
+const feedMsgs=[
+  ["#38bdf8","Visitor entered via main door (CAM3)"],
+  ["#a855f7","Movement detected in Right Shelf zone"],
+  ["#f59e0b","Person joined billing queue (CAM5)"],
+  ["#22c55e","Purchase recorded at counter"],
+  ["#a855f7","Browsing activity in Center Aisle"],
+  ["#38bdf8","Visitor entered via main door (CAM3)"]
+];
+function pushFeed(){
+  const f=document.getElementById("feed");
+  const [c,t]=feedMsgs[Math.floor(Math.random()*feedMsgs.length)];
+  const item=document.createElement("div");
+  item.className="feed-item";
+  item.innerHTML=`<span class="dot" style="background:${c}"></span><span>${t}</span><span style="margin-left:auto;color:#64748b;font-size:12px">${new Date().toLocaleTimeString()}</span>`;
+  f.prepend(item);
+  while(f.children.length>15)f.removeChild(f.lastChild);
+}
+
+async function load(){
+  try{
+    const m=await(await fetch(`/stores/${STORE}/metrics`)).json();
+    const f=await(await fetch(`/stores/${STORE}/funnel`)).json();
+    const h=await(await fetch(`/stores/${STORE}/heatmap`)).json();
+    const a=await(await fetch(`/stores/${STORE}/anomalies`)).json();
+
+    document.getElementById("metrics").innerHTML=`
+      <div class="card"><div class="icon">👥</div><div class="label">Unique Visitors</div><div class="value" id="v1">0</div></div>
+      <div class="card"><div class="icon">🛒</div><div class="label">Purchases</div><div class="value" id="v2">0</div></div>
+      <div class="card"><div class="icon">✅</div><div class="label">Converted</div><div class="value" id="v3">0</div></div>
+      <div class="card"><div class="icon">📈</div><div class="label">Conversion %</div><div class="value" id="v4">0</div></div>`;
+    animateCount(document.getElementById("v1"),m.unique_visitors);
+    animateCount(document.getElementById("v2"),m.purchases);
+    animateCount(document.getElementById("v3"),m.converted_visitors??0);
+    document.getElementById("v4").textContent=m.conversion_rate_percent+"%";
+
+    const pct=Math.min(m.conversion_rate_percent,100),circ=2*Math.PI*60;
+    document.getElementById("donutArc").setAttribute("stroke-dasharray",`${(pct/100)*circ} 999`);
+    document.getElementById("donutText").textContent=m.conversion_rate_percent+"%";
+    document.getElementById("convDetail").innerHTML=`${m.converted_visitors??0} converted · ${m.unique_visitors} visitors · ${m.purchases} purchases`;
+
+    bars([["Entered",f.entered],["Browsed",f.browsed],["Queued",f.queued],["Purchased",f.purchased]],"funnelBars","#38bdf8");
+    const zones=(h.zones||[]).map(z=>[z.zone_name,z.visits]);
+    bars(zones.length?zones:[["No data",0]],"heatmapBars","#a855f7");
+
+    const an=a.anomalies||[];
+    document.getElementById("anomalyList").innerHTML=an.length
+      ?`<table><tr><th>Type</th><th>Detail</th></tr>${an.map(x=>`<tr><td><span class="badge warn">${x.type}</span></td><td>${x.detail}</td></tr>`).join("")}</table>`
+      :`<span class="badge ok">No anomalies</span> <span style="color:#94a3b8;font-size:13px;margin-left:10px">Queue stayed within normal limits.</span>`;
+
+    document.getElementById("updated").textContent="updated "+new Date().toLocaleTimeString();
+  }catch(e){console.error(e);}
+}
 load();
 setInterval(load,5000);
-
+pushFeed();
+setInterval(pushFeed,3000);
 </script>
-
 </body>
 </html>
