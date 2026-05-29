@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from app.db import init_db, get_connection
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -16,14 +16,25 @@ app = FastAPI(title="Store Intelligence API", version="1.0.0")
 
 @app.on_event("startup")
 def startup():
-    init_db()
+    try:
+        init_db()
+    except Exception as e:
+        logger.error(json.dumps({"event": "startup_db_error", "error": str(e)}))
 
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     trace_id = str(uuid.uuid4())
     start = time.time()
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        latency_ms = round((time.time() - start) * 1000, 2)
+        logger.error(json.dumps({
+            "trace_id": trace_id, "endpoint": request.url.path,
+            "error": str(e), "latency_ms": latency_ms,
+        }))
+        return JSONResponse(status_code=500, content={"error": "internal_error", "trace_id": trace_id})
     latency_ms = round((time.time() - start) * 1000, 2)
     store_id = None
     parts = request.url.path.split("/")
@@ -32,12 +43,8 @@ async def log_requests(request: Request, call_next):
         if idx + 1 < len(parts):
             store_id = parts[idx + 1]
     logger.info(json.dumps({
-        "trace_id": trace_id,
-        "store_id": store_id,
-        "endpoint": request.url.path,
-        "method": request.method,
-        "status_code": response.status_code,
-        "latency_ms": latency_ms,
+        "trace_id": trace_id, "store_id": store_id, "endpoint": request.url.path,
+        "method": request.method, "status_code": response.status_code, "latency_ms": latency_ms,
     }))
     response.headers["X-Trace-Id"] = trace_id
     return response
@@ -73,8 +80,7 @@ def compute_converted(conn, store_id):
         if pt is None:
             continue
         for qt in queue_times:
-            delta = (pt - qt).total_seconds()
-            if 0 <= delta <= 300:
+            if 0 <= (pt - qt).total_seconds() <= 300:
                 converted += 1
                 break
     return converted
@@ -92,15 +98,23 @@ def health():
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
-    html_path = Path(__file__).parent / "dashboard.html"
-    return html_path.read_text(encoding="utf-8")
+    try:
+        html_path = Path(__file__).parent / "dashboard.html"
+        return html_path.read_text(encoding="utf-8")
+    except Exception:
+        return HTMLResponse("<h1>Dashboard unavailable</h1>", status_code=503)
 
 
 @app.post("/events/ingest")
 def ingest_events(events: list[dict]):
+    if not isinstance(events, list):
+        return JSONResponse(status_code=400, content={"error": "expected a list of events"})
     conn = get_connection()
-    inserted = 0
+    inserted, skipped = 0, 0
     for e in events:
+        if not isinstance(e, dict):
+            skipped += 1
+            continue
         try:
             conn.execute(
                 """INSERT OR IGNORE INTO events
@@ -115,33 +129,32 @@ def ingest_events(events: list[dict]):
             )
             inserted += 1
         except Exception:
-            pass
+            skipped += 1
     conn.commit()
     conn.close()
-    logger.info(json.dumps({"event": "ingest", "event_count": len(events), "ingested": inserted}))
-    return {"ingested": inserted, "status": "accepted"}
+    logger.info(json.dumps({"event": "ingest", "received": len(events), "ingested": inserted, "skipped": skipped}))
+    return {"ingested": inserted, "skipped": skipped, "status": "accepted"}
 
 
 @app.get("/stores/{store_id}/metrics")
 def get_metrics(store_id: str):
     conn = get_connection()
-    visitors = conn.execute(
-        "SELECT COUNT(DISTINCT track_id) AS c FROM events WHERE store_code=? AND event_type='entry' AND is_staff=0",
-        (store_id,),
-    ).fetchone()["c"] or 0
-    purchases = conn.execute(
-        "SELECT COUNT(*) AS c FROM events WHERE store_code=? AND event_type='purchase'",
-        (store_id,),
-    ).fetchone()["c"] or 0
-    converted = compute_converted(conn, store_id)
-    conn.close()
+    try:
+        visitors = conn.execute(
+            "SELECT COUNT(DISTINCT track_id) AS c FROM events WHERE store_code=? AND event_type='entry' AND is_staff=0",
+            (store_id,),
+        ).fetchone()["c"] or 0
+        purchases = conn.execute(
+            "SELECT COUNT(*) AS c FROM events WHERE store_code=? AND event_type='purchase'",
+            (store_id,),
+        ).fetchone()["c"] or 0
+        converted = compute_converted(conn, store_id)
+    finally:
+        conn.close()
     conversion = round((converted / visitors) * 100, 1) if visitors > 0 else 0.0
     return {
-        "store_id": store_id,
-        "unique_visitors": visitors,
-        "purchases": purchases,
-        "converted_visitors": converted,
-        "conversion_rate_percent": conversion,
+        "store_id": store_id, "unique_visitors": visitors, "purchases": purchases,
+        "converted_visitors": converted, "conversion_rate_percent": conversion,
         "avg_dwell_seconds": 0,
         "note": "Conversion uses spec method: a visitor is converted if billing-zone activity occurred within the 5-minute window before a purchase. See DESIGN.md.",
     }
@@ -150,45 +163,33 @@ def get_metrics(store_id: str):
 @app.get("/stores/{store_id}/funnel")
 def get_funnel(store_id: str):
     conn = get_connection()
-    entered = conn.execute(
-        "SELECT COUNT(DISTINCT track_id) AS c FROM events WHERE store_code=? AND event_type='entry' AND is_staff=0",
-        (store_id,),
-    ).fetchone()["c"] or 0
-    browsed = conn.execute(
-        "SELECT COUNT(DISTINCT track_id) AS c FROM events WHERE store_code=? AND event_type='zone_entered'",
-        (store_id,),
-    ).fetchone()["c"] or 0
-    queued = conn.execute(
-        "SELECT COUNT(*) AS c FROM events WHERE store_code=? AND event_type='queue'",
-        (store_id,),
-    ).fetchone()["c"] or 0
-    purchased = conn.execute(
-        "SELECT COUNT(*) AS c FROM events WHERE store_code=? AND event_type='purchase'",
-        (store_id,),
-    ).fetchone()["c"] or 0
-    conn.close()
+    try:
+        entered = conn.execute("SELECT COUNT(DISTINCT track_id) AS c FROM events WHERE store_code=? AND event_type='entry' AND is_staff=0", (store_id,)).fetchone()["c"] or 0
+        browsed = conn.execute("SELECT COUNT(DISTINCT track_id) AS c FROM events WHERE store_code=? AND event_type='zone_entered'", (store_id,)).fetchone()["c"] or 0
+        queued = conn.execute("SELECT COUNT(*) AS c FROM events WHERE store_code=? AND event_type='queue'", (store_id,)).fetchone()["c"] or 0
+        purchased = conn.execute("SELECT COUNT(*) AS c FROM events WHERE store_code=? AND event_type='purchase'", (store_id,)).fetchone()["c"] or 0
+    finally:
+        conn.close()
     return {"store_id": store_id, "entered": entered, "browsed": browsed, "queued": queued, "purchased": purchased}
 
 
 @app.get("/stores/{store_id}/heatmap")
 def get_heatmap(store_id: str):
     conn = get_connection()
-    rows = conn.execute(
-        "SELECT zone_name, COUNT(*) AS visits FROM events WHERE store_code=? AND event_type='zone_entered' GROUP BY zone_name",
-        (store_id,),
-    ).fetchall()
-    conn.close()
+    try:
+        rows = conn.execute("SELECT zone_name, COUNT(*) AS visits FROM events WHERE store_code=? AND event_type='zone_entered' GROUP BY zone_name", (store_id,)).fetchall()
+    finally:
+        conn.close()
     return {"store_id": store_id, "zones": [{"zone_name": r["zone_name"], "visits": r["visits"]} for r in rows]}
 
 
 @app.get("/stores/{store_id}/anomalies")
 def get_anomalies(store_id: str):
     conn = get_connection()
-    max_queue = conn.execute(
-        "SELECT MAX(track_id) AS m FROM events WHERE store_code=? AND event_type='queue'",
-        (store_id,),
-    ).fetchone()["m"]
-    conn.close()
+    try:
+        max_queue = conn.execute("SELECT MAX(track_id) AS m FROM events WHERE store_code=? AND event_type='queue'", (store_id,)).fetchone()["m"]
+    finally:
+        conn.close()
     anomalies = []
     if max_queue and max_queue > 5:
         anomalies.append({"type": "long_queue", "detail": f"Queue length reached {max_queue}"})
