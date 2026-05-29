@@ -5,9 +5,9 @@ Converts raw CCTV footage from a retail store into business metrics: footfall, c
 ## What it does
 
 - Detects and tracks people in CCTV footage (YOLOv8 + ByteTrack)
-- Generates structured events (entry, queue, zone) from video
+- Generates structured events (entry, queue, zone, staff) from video
 - Correlates footfall with POS sales to compute conversion rate
-- Exposes analytics via a REST API
+- Exposes analytics via a REST API and a live dashboard
 
 ## Camera mapping
 
@@ -16,7 +16,7 @@ Converts raw CCTV footage from a retail store into business metrics: footfall, c
 | CAM3 | Entry / Exit | Footfall (unique visitors) |
 | CAM5 | Billing counter | Queue length analytics |
 | CAM1, CAM2 | Shelves | Zone analytics |
-| CAM4 | Backroom | Staff area (out of scope) |
+| CAM4 | Backroom | Staff detection |
 
 ## Architecture
 
@@ -36,7 +36,7 @@ FastAPI Ingestion API
 SQLite Event Store
         |
         v
-Metrics / Funnel / Heatmap / Anomalies API
+Metrics / Funnel / Heatmap / Anomalies API + Dashboard
 ```
 
 ## Setup
@@ -66,7 +66,12 @@ API available at `http://localhost:8000` — interactive docs at `http://localho
 
 ## Live Dashboard (Part E)
 
-After starting the API, open the live analytics dashboard at:http://localhost:8000/dashboard
+After starting the API, open the live analytics dashboard at:
+
+```
+http://localhost:8000/dashboard
+```
+
 It shows visitor metrics, the conversion funnel, and the zone heatmap, auto-refreshing every 5 seconds.
 
 ## Pipeline
@@ -81,8 +86,12 @@ python pipeline/load_pos.py
 # Generate queue events from CAM5
 python pipeline/cam5_queue.py
 
-# Generate zone events from CAM1
+# Generate zone events from CAM1 and CAM2
 python pipeline/cam_zones.py
+python pipeline/cam2_zones.py
+
+# Generate staff events from CAM4
+python pipeline/cam4_staff.py
 
 # Feed generated events into the API
 python pipeline/feed_events.py
@@ -98,7 +107,10 @@ python pipeline/feed_events.py
 | GET | `/stores/{store_id}/funnel` | Entry to purchase funnel |
 | GET | `/stores/{store_id}/heatmap` | Zone visit counts |
 | GET | `/stores/{store_id}/anomalies` | Queue anomaly detection |
+| GET | `/dashboard` | Live analytics dashboard |
 
 ## Notes
 
-Data files (CCTV videos, POS records) are gitignored for size and confidentiality. See `docs/DESIGN.md` and `docs/CHOICES.md` for architecture decisions and assumptions.
+Data files (CCTV videos, POS records) are gitignored for size and confidentiality. See `docs/DESIGN.md` and `docs/CHOICES.md` for architecture decisions and assumptions, and `HOW_I_BUILT_THIS.md` for the development journey.
+
+This project was built by me with AI assistance for scaffolding and boilerplate. The camera-to-role mapping, the per-camera pipeline scripts (queue, zones, staff), the POS deduplication logic, the dashboard, and all debugging and validation were done and verified by me. AI accelerated the routine parts; the engineering decisions were mine.

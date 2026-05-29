@@ -51,6 +51,10 @@ I added structured logging (every request logs trace_id, store_id, endpoint, sta
 - **A stale Docker container** kept serving old code on port 8000 even after I updated the source. I found it with `netstat -ano | findstr :8000`, saw multiple processes on the port, and shut down the old container — the kind of debugging that only shows up in real deployments.
 - **Store ID alignment** — the acceptance gate tests `STORE_BLR_002`; I aligned the pipeline and database to that store code.
 
+## How I worked with AI
+
+I used AI as an accelerator, not a replacement for thinking. It helped scaffold the FastAPI service and draft a first detection loop; I took those starting points and wrote the camera-specific logic myself — queue detection, zone segmentation, staff detection, and POS deduplication. I refined the dashboard, debugged the runtime issues (like the stale Docker container on port 8000), and made every data and architecture decision after reading and testing the code. Where AI output did not fit, I rewrote it — for instance, reworking conversion to the spec's 5-minute correlation method.
+
 ## What I would do next
 
 With more time: align the event schema exactly to the provided sample, add cross-camera re-identification so a person is the same identity across feeds, process full-length footage so the conversion time windows intersect, and extend to multiple stores (the architecture already filters every query by store_code, so this is a matter of running the pipeline on more footage).
