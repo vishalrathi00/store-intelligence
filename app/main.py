@@ -3,7 +3,9 @@ import uuid
 import logging
 import json
 from datetime import datetime
+from pathlib import Path
 from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 from app.db import init_db, get_connection
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -42,7 +44,6 @@ async def log_requests(request: Request, call_next):
 
 
 def parse_ts(ts):
-    """Parse a timestamp string into a datetime; returns None on failure."""
     if not ts:
         return None
     ts = ts.strip()
@@ -56,12 +57,6 @@ def parse_ts(ts):
 
 
 def compute_converted(conn, store_id):
-    """
-    Spec method: a visitor counts as converted if there was billing-zone
-    activity within the 5-minute window before a purchase timestamp.
-    We correlate purchase event timestamps with queue (billing) event
-    timestamps on the same store.
-    """
     purchases = conn.execute(
         "SELECT event_timestamp FROM events WHERE store_code=? AND event_type='purchase'",
         (store_id,),
@@ -70,10 +65,8 @@ def compute_converted(conn, store_id):
         "SELECT event_timestamp FROM events WHERE store_code=? AND event_type='queue'",
         (store_id,),
     ).fetchall()
-
     queue_times = [parse_ts(r["event_timestamp"]) for r in queue_rows]
     queue_times = [t for t in queue_times if t is not None]
-
     converted = 0
     for p in purchases:
         pt = parse_ts(p["event_timestamp"])
@@ -81,7 +74,7 @@ def compute_converted(conn, store_id):
             continue
         for qt in queue_times:
             delta = (pt - qt).total_seconds()
-            if 0 <= delta <= 300:  # billing activity within 5 min before purchase
+            if 0 <= delta <= 300:
                 converted += 1
                 break
     return converted
@@ -95,6 +88,12 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "store-intelligence"}
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard():
+    html_path = Path(__file__).parent / "dashboard.html"
+    return html_path.read_text(encoding="utf-8")
 
 
 @app.post("/events/ingest")
