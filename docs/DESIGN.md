@@ -41,6 +41,9 @@ This project was built with AI assistance, which the challenge permits. I used A
 ## Scope note
 
 The challenge brief references "5 stores, 3 camera angles each." The dataset I received covered a single store (Purplle, Brigade Road) with five camera feeds, so I scoped the implementation to that one store (store code STORE_BLR_002). The pipeline and API are not hard-coded to one store — every event carries a store_code and all metrics queries filter by it, so adding more stores is a matter of running the same pipeline on their footage and ingesting the events. The single-store focus reflects the data available, not an architectural limit.
+## Event schema note
+
+Events use a simplified, consistent schema (event_type, track_id, store_code, camera_id, event_timestamp, zone_name, is_staff) rather than the full field set in the provided sample_events.jsonl. This keeps ingestion and querying uniform across all event types. Aligning field-for-field with the sample schema is a straightforward next step and would not change the pipeline or API logic.
 
 ## Limitations and future work
 
