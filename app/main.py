@@ -115,6 +115,16 @@ def ingest_events(events: list[dict]):
         if not isinstance(e, dict):
             skipped += 1
             continue
+        # Flexible field mapping: accept both our schema and the spec sample schema
+        track_id = e.get("track_id")
+        if track_id is None:
+            id_token = e.get("id_token")
+            if id_token:
+                digits = "".join(ch for ch in str(id_token) if ch.isdigit())
+                track_id = int(digits) if digits else None
+        store_code = e.get("store_code") or e.get("store_id")
+        timestamp = e.get("event_timestamp") or e.get("event_time")
+        zone_name = e.get("zone_name")
         try:
             conn.execute(
                 """INSERT OR IGNORE INTO events
@@ -122,9 +132,9 @@ def ingest_events(events: list[dict]):
                     event_timestamp, zone_name, is_staff)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    e.get("event_type"), e.get("track_id"), e.get("store_code"),
-                    e.get("camera_id"), e.get("event_timestamp"),
-                    e.get("zone_name"), 1 if e.get("is_staff") else 0,
+                    e.get("event_type"), track_id, store_code,
+                    e.get("camera_id"), timestamp,
+                    zone_name, 1 if e.get("is_staff") else 0,
                 ),
             )
             inserted += 1

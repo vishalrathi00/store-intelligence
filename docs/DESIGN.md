@@ -37,6 +37,7 @@ Staff detection is implemented via CAM4 (backroom): persons tracked in the backr
 ## Event schema note
 
 Events use a simplified, consistent schema rather than the full field set in the provided sample_events.jsonl. This keeps ingestion and querying uniform across all event types. The simplified schema captures the same semantic fields as the sample; aligning names exactly is a rename/documentation change, not a logic change.
+The ingestion endpoint accepts both this simplified schema and the field names from the provided sample (`id_token`, `store_id`, `event_time`), mapping them automatically — so events in the spec's format are ingested without changes.
 
 ### Schema field mapping
 
