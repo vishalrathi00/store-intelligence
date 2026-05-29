@@ -64,6 +64,11 @@ docker compose up --build
 
 API available at `http://localhost:8000` — interactive docs at `http://localhost:8000/docs`.
 
+## Live Dashboard (Part E)
+
+After starting the API, open the live analytics dashboard at:http://localhost:8000/dashboard
+It shows visitor metrics, the conversion funnel, and the zone heatmap, auto-refreshing every 5 seconds.
+
 ## Pipeline
 
 ```bash

@@ -37,3 +37,6 @@ This project was built with AI assistance, which the challenge permits. I used A
 ## Limitations and future work
 
 The visitor count reflects only the processed footage sample, while purchases reflect the full POS day, so the time windows do not fully intersect — this is documented transparently in the metrics response rather than hidden. Zones are approximated as three vertical frame regions rather than exact floor-plan polygons. CAM4 (backroom) is mapped for staff detection — to exclude staff from visitor counts — but was deprioritized in favor of completing documentation and tests. The architecture supports all of these via the same pipeline-to-API path.
+## Scope note
+
+The challenge brief references "5 stores, 3 camera angles each." The dataset I received covered a single store (Purplle, Brigade Road) with five camera feeds, so I scoped the implementation to that one store (store code STORE_BLR_002). The pipeline and API are not hard-coded to one store — every event carries a store_code and all metrics queries filter by it, so adding more stores is a matter of running the same pipeline on their footage and ingesting the events. The single-store focus reflects the data available, not an architectural limit.
